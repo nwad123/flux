@@ -14,8 +14,8 @@
 
 namespace flux {
 
-using nullopt_t = std::nullopt_t;
-inline constexpr nullopt_t const& nullopt = std::nullopt;
+FLUX_EXPORT using nullopt_t = std::nullopt_t;
+FLUX_EXPORT inline constexpr nullopt_t const& nullopt = std::nullopt;
 
 namespace detail {
 
@@ -27,6 +27,7 @@ concept can_optional =
 
 }
 
+FLUX_EXPORT
 template <typename T>
 class optional;
 
@@ -105,11 +106,16 @@ public:
     constexpr optional& operator=(optional const& other)
         noexcept(std::is_nothrow_copy_assignable_v<T> &&
                  std::is_nothrow_copy_constructible_v<T>)
-        requires std::copyable<T>
+        requires std::copy_constructible<T>
     {
         if (engaged_) {
             if (other.engaged_) {
-                item_ = other.item_;
+                if constexpr (std::is_copy_assignable_v<T>) {
+                    item_ = other.item_;
+                } else {
+                    reset();
+                    construct(other.item_);
+                }
             } else {
                 reset();
             }
@@ -122,7 +128,8 @@ public:
     }
 
     optional& operator=(optional const&)
-        requires std::copyable<T> && std::is_trivially_copy_assignable_v<T>
+        requires std::copy_constructible<T> &&
+                 std::is_trivially_copy_assignable_v<T>
         = default;
 
     /*
@@ -148,11 +155,16 @@ public:
     constexpr optional& operator=(optional&& other)
         noexcept(std::is_nothrow_move_constructible_v<T> &&
                  std::is_nothrow_move_assignable_v<T>)
-        requires std::movable<T>
+        requires std::move_constructible<T>
     {
         if (engaged_) {
             if (other.engaged_) {
-                item_ = std::move(other.item_);
+                if constexpr (std::is_move_assignable_v<T>) {
+                    item_ = std::move(other).item_;
+                } else {
+                    reset();
+                    construct(std::move(other).item_);
+                }
             } else {
                 reset();
             }
@@ -165,7 +177,7 @@ public:
     }
 
     constexpr optional& operator=(optional&&)
-        requires std::movable<T> &&
+        requires std::move_constructible<T> &&
                  std::is_trivially_move_assignable_v<T>
         = default;
 
@@ -443,6 +455,10 @@ public:
      * Modifiers
      */
     constexpr auto reset() -> void { ptr_ = nullptr; }
+
+    template <typename U = T>
+        requires requires(U& u) { test_fn(u); }
+    constexpr auto emplace(U& item) -> void { ptr_ = std::addressof(item); }
 
     /*
      * Monadic operations

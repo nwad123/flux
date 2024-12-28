@@ -3,14 +3,14 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux.hpp>
-
-#include "test_utils.hpp"
-
 #include <array>
 #include <list>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "test_utils.hpp"
 
 namespace {
 
@@ -27,9 +27,18 @@ constexpr bool test_drop() {
         static_assert(flux::sized_sequence<D>);
         static_assert(flux::bounded_sequence<D>);
 
+        static_assert(flux::contiguous_sequence<D const>);
+        static_assert(flux::sized_sequence<D const>);
+        static_assert(flux::bounded_sequence<D const>);
+
         STATIC_CHECK(flux::size(dropped) == 5);
         STATIC_CHECK(flux::data(dropped) == arr + 5);
         STATIC_CHECK(check_equal(dropped, {5, 6, 7, 8, 9}));
+
+        auto const& c_dropped = dropped;
+        STATIC_CHECK(flux::size(c_dropped) == 5);
+        STATIC_CHECK(flux::data(c_dropped) == arr + 5);
+        STATIC_CHECK(check_equal(c_dropped, {5, 6, 7, 8, 9}));
     }
 
     {
@@ -42,8 +51,16 @@ constexpr bool test_drop() {
         static_assert(flux::sized_sequence<D>);
         static_assert(flux::bounded_sequence<D>);
 
+        static_assert(flux::contiguous_sequence<D const>);
+        static_assert(flux::sized_sequence<D const>);
+        static_assert(flux::bounded_sequence<D const>);
+
         STATIC_CHECK(flux::size(dropped) == 5);
         STATIC_CHECK(check_equal(dropped, {5, 6, 7, 8, 9}));
+
+        auto const& c_dropped = dropped;
+        STATIC_CHECK(flux::size(c_dropped) == 5);
+        STATIC_CHECK(check_equal(c_dropped, {5, 6, 7, 8, 9}));
     }
 
     {
@@ -99,6 +116,37 @@ constexpr bool test_drop() {
 }
 static_assert(test_drop());
 
+constexpr bool issue_132a()
+{
+    auto result = flux::from(std::array{1, 2})
+                      .filter(flux::pred::even)
+                      .drop(2)
+                      .drop(1);
+    STATIC_CHECK(flux::is_empty(result));
+    return true;
+}
+static_assert(issue_132a());
+
+void issue_132b()
+{
+    using namespace flux;
+
+    auto intersperse = [](auto r, auto e) -> auto {
+        return flux::map(std::move(r), [e](auto const& x) -> auto {
+                   return std::vector{e, x};
+               }).flatten().drop(1);
+    };
+
+    auto sfml_argument = [](std::string_view) -> std::string { return "abc";  };
+
+    auto sfml_argument_list = [&](std::span<std::string_view> mf) -> std::string {
+        return "(" + intersperse(drop(mf, 1).map(sfml_argument), std::string(", ")).flatten().to<std::string>() + ")";
+    };
+
+    std::vector<std::string_view> v {"point"};
+    (void) sfml_argument_list(v);
+}
+
 }
 
 TEST_CASE("drop")
@@ -114,4 +162,7 @@ TEST_CASE("drop")
 
         REQUIRE_THROWS_AS(flux::from_range(list).drop(-1000), flux::unrecoverable_error);
     }
+
+    issue_132b();
+
 }

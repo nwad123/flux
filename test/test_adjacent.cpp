@@ -3,14 +3,16 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux.hpp>
+#include <array>
+#include <tuple>
 
 #include "test_utils.hpp"
 
-#include <array>
-
+#ifndef USE_MODULES
+#include <flux.hpp>
+#else
+import flux;
+#endif
 
 namespace {
 
@@ -31,7 +33,7 @@ constexpr bool test_pairwise()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto seq = flux::ref(arr).pairwise();
+        auto seq = flux::mut_ref(arr).pairwise();
 
         using S = decltype(seq);
         static_assert(flux::multipass_sequence<S>);

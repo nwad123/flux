@@ -3,13 +3,9 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux.hpp>
+#include <array>
 
 #include "test_utils.hpp"
-
-#include <array>
 
 namespace {
 
@@ -77,7 +73,9 @@ constexpr bool test_compare()
     // empty sequences are equal
     {
         // ...but still require the element types to be comparable
-        static_assert(not std::invocable<flux::detail::compare_fn, flux::detail::empty_sequence<int>, flux::detail::empty_sequence<std::nullptr_t>>);
+        static_assert(not std::invocable<decltype(flux::compare),
+                                         decltype(flux::empty<int>),
+                                         decltype(flux::empty<std::nullptr_t>)>);
 
         auto r = flux::compare(flux::empty<int>, flux::empty<int>);
         static_assert(std::same_as<decltype(r), std::strong_ordering>);
@@ -115,6 +113,39 @@ constexpr bool test_compare()
                                flux::proj2(std::compare_three_way{}, &Test::i, [](Test t) { return t.i; }));
         static_assert(std::same_as<decltype(r), std::strong_ordering>);
         STATIC_CHECK(r == std::strong_ordering::equal);
+    }
+
+    {
+        std::array<std::uint8_t, 3> arr1{1, 2, 3};
+        std::array<std::uint8_t, 3> arr2{1, 2, 3};
+        auto r = flux::compare(arr1, arr2);
+
+        static_assert(std::same_as<decltype(r), std::strong_ordering>);
+        STATIC_CHECK(r == std::strong_ordering::equal);
+    }
+
+    {
+        std::array<std::uint8_t, 3> arr1{1, 2, 3};
+        std::array<std::uint8_t, 0> arr2{};
+        auto r = flux::compare(arr1, arr2);
+        static_assert(std::same_as<decltype(r), std::strong_ordering>);
+        STATIC_CHECK(r == std::strong_ordering::greater);
+        
+        auto r2 = flux::compare(arr2, arr1);
+        STATIC_CHECK(r2 == std::strong_ordering::less);
+    }
+
+    {
+        std::array<std::uint8_t, 3> arr1{1, 2, 3};
+        std::array<std::uint8_t, 3> arr2{1, 2, 4};
+        
+        auto r1 = flux::compare(arr1, arr2);
+        
+        static_assert(std::same_as<decltype(r1), std::strong_ordering>);
+        STATIC_CHECK(r1 == std::strong_ordering::less);
+        
+        auto r2 = flux::compare(arr2, arr1);
+        STATIC_CHECK(r2 == std::strong_ordering::greater);
     }
 
     return true;

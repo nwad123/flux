@@ -1,15 +1,24 @@
 
 // Copyright (c) 2022 Tristan Brindle (tcbrindle at gmail dot com)
+// Copyright (c) 2023 NVIDIA Corporation (reply-to: brycelelbach@gmail.com)
+//
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
 #pragma once
 
-#include <flux/core.hpp>
-#include <flux/op/from.hpp>
-#include <flux/op/ref.hpp>
+#include <doctest/doctest.h>
 
-#define STATIC_CHECK(...) if (!(__VA_ARGS__)) return false
+#include <stdexcept>
+
+#ifndef USE_MODULES
+#include <flux.hpp>
+#else
+#include <flux/macros.hpp>
+import flux;
+#endif
+
+#define STATIC_CHECK(...) if (!(__VA_ARGS__)) throw std::runtime_error("Test assertion failed")
 
 inline namespace test_utils {
 
@@ -79,7 +88,7 @@ public:
 }
 
 template <typename Base>
-struct flux::sequence_traits<single_pass_only<Base>>
+struct flux::sequence_traits<single_pass_only<Base>> : flux::default_sequence_traits
 {
     using self_t = single_pass_only<Base>;
     using cursor_t = typename single_pass_only<Base>::cursor_type;

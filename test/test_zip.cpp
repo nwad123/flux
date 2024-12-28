@@ -3,15 +3,11 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux.hpp>
-
-#include "test_utils.hpp"
-
 #include <array>
 #include <iostream>
 #include <list>
+
+#include "test_utils.hpp"
 
 namespace {
 
@@ -21,7 +17,7 @@ constexpr bool test_zip()
         int arr1[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
         double arr2[] = {0, 100, 200, 300, 400};
 
-        auto zipped = flux::zip(flux::ref(arr1), flux::ref(arr2));
+        auto zipped = flux::zip(flux::mut_ref(arr1), flux::mut_ref(arr2));
 
         using Z = decltype(zipped);
 
@@ -112,7 +108,7 @@ constexpr bool test_zip()
         move_only arr1[] = {1, 2, 3, 4, 5};
         move_only arr2[] = {100, 200, 300, 400, 500};
 
-        auto zipped = flux::zip(flux::ref(arr1), flux::ref(arr2));
+        auto zipped = flux::zip(flux::mut_ref(arr1), flux::mut_ref(arr2));
 
         using Z = decltype(zipped);
         static_assert(flux::random_access_sequence<Z>);
@@ -132,7 +128,7 @@ constexpr bool test_zip()
         std::array arr2 = {0, 100, 200, 300, 400};
         std::array arr3 = {'o', 'l', 'l', 'e', 'h', '\0'};
 
-        flux::inplace_reverse(flux::zip(flux::ref(arr1), flux::ref(arr2), flux::ref(arr3)));
+        flux::inplace_reverse(flux::zip(flux::mut_ref(arr1), flux::mut_ref(arr2), flux::mut_ref(arr3)));
 
         STATIC_CHECK(arr1 == std::array{4, 3, 2, 1, 0, 5, 6, 7, 8, 9});
         STATIC_CHECK(arr2 == std::array{400, 300, 200, 100, 0});
@@ -144,7 +140,7 @@ constexpr bool test_zip()
         std::array arr2 = {0.0, 100.0, 200.0, 300.0, 400.0};
         std::array arr3 = {'o', 'l', 'l', 'e', 'h', '\0'};
 
-        auto view = flux::zip(flux::ref(arr1), flux::ref(arr2), flux::ref(arr3));
+        auto view = flux::zip(flux::mut_ref(arr1), flux::mut_ref(arr2), flux::mut_ref(arr3));
 
         using V = decltype(view);
 
@@ -160,6 +156,23 @@ constexpr bool test_zip()
         static_assert(std::same_as<rng::range_rvalue_reference_t<V>, std::tuple<int&&, double&&, char&&>>);
 
         STATIC_CHECK(view.size() == 5);
+    }
+
+    // test unpack()
+    {
+        auto vals = std::array{0, 1, 2, 3, 4};
+        auto words = std::array<std::string_view, 3>{"0", "1", "2"};
+
+        flux::zip(flux::mut_ref(vals), words)
+            .map(flux::unpack([](int& val, std::string_view str) -> int& {
+                if (str[0] - '0' != val) {
+                    throw std::runtime_error("Something has gone wrong");
+                }
+                return val;
+            }))
+            .fill(100);
+
+        STATIC_CHECK(check_equal(vals, {100, 100, 100, 3, 4}));
     }
 
     return true;

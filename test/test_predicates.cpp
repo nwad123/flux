@@ -3,14 +3,11 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux/core/predicates.hpp>
-
-#include "test_utils.hpp"
-
+#include <algorithm>
 #include <array>
 #include <string_view>
+
+#include "test_utils.hpp"
 
 namespace {
 
@@ -118,11 +115,193 @@ constexpr bool test_predicate_combiners()
 }
 static_assert(test_predicate_combiners());
 
+// Not really predicates, but we'll test them here anyway
+constexpr bool test_comparisons()
+{
+    namespace cmp = flux::cmp;
+
+    struct Test {
+        int i;
+        double d;
+
+        bool operator==(Test const&) const = default;
+    };
+
+    // min of two same-type non-const lvalue references is an lvalue
+    {
+        int i = 0, j = 1;
+        cmp::min(i, j) = 99;
+        STATIC_CHECK(i == 99);
+        STATIC_CHECK(j == 1);
+    }
+
+    // min of same-type mixed-const lvalue refs is a const ref
+    {
+        int i = 1;
+        int const j = 0;
+        auto& m = cmp::min(i, j);
+        static_assert(std::same_as<decltype(m), int const&>);
+        STATIC_CHECK(m == 0);
+    }
+
+    // min of same-type lvalue and prvalue is a prvalue
+    {
+        int const i = 1;
+        using M = decltype(cmp::min(i, i + 1));
+        static_assert(std::same_as<M, int>);
+        STATIC_CHECK(cmp::min(i, i + 1) == 1);
+    }
+
+    // Custom comparators work okay with min()
+    {
+        Test t1{3, 1.0};
+        Test t2{2, 1.0};
+
+        auto cmp_test = [](Test t1, Test t2) { return t1.i <=> t2.i; };
+
+        STATIC_CHECK(cmp::min(t1, t2, cmp_test) == t2);
+    }
+
+    // If arguments are equal, min() returns the first
+    {
+        int i = 1, j = 1;
+        int& m = cmp::min(i, j);
+        STATIC_CHECK(&m == &i);
+
+        Test t1{1, 3.0};
+        Test t2{1, 2.0};
+
+        STATIC_CHECK(cmp::min(t1, t2, flux::proj(cmp::compare, &Test::i)) == t1);
+    }
+
+    // max of two same-type non-const lvalue references is an lvalue
+    {
+        int i = 0, j = 1;
+        cmp::max(i, j) = 99;
+        STATIC_CHECK(i == 0);
+        STATIC_CHECK(j == 99);
+    }
+
+    // max of same-type mixed-const lvalue refs is a const ref
+    {
+        int i = 1;
+        int const j = 0;
+        auto& m = cmp::max(i, j);
+        static_assert(std::same_as<decltype(m), int const&>);
+        STATIC_CHECK(m == 1);
+    }
+
+    // max of same-type lvalue and prvalue is a prvalue
+    {
+        int const i = 1;
+        using M = decltype(cmp::max(i, i + 1));
+        static_assert(std::same_as<M, int>);
+        STATIC_CHECK(cmp::max(i, i + 1) == 2);
+    }
+
+    // Custom comparators work okay with max()
+    {
+        Test t1{1, 3.0};
+        Test t2{1, 2.0};
+
+        auto cmp_test = [](Test t1, Test t2) { return t1.i <=> t2.i; };
+
+        STATIC_CHECK(cmp::max(t1, t2, cmp_test) == t2);
+    }
+
+    // If arguments are equal, max() returns the second
+    {
+        int i = 1, j = 1;
+        int& m = cmp::max(i, j);
+        STATIC_CHECK(&m == &j);
+
+        Test t1{1, 3.0};
+        Test t2{1, 2.0};
+
+        STATIC_CHECK(cmp::max(t1, t2, flux::proj(cmp::compare, &Test::i)) == t2);
+    }
+
+    // Reverse comparisons give the expected answer
+    {
+        int i = 1, j = 2;
+        int& min = cmp::min(i, j, cmp::reverse_compare);
+        int& max = cmp::max(i, j, cmp::reverse_compare);
+        STATIC_CHECK(&min == &j);
+        STATIC_CHECK(&max == &i);
+
+        Test t1{1, 3.0};
+        Test t2{1, 2.0};
+
+        STATIC_CHECK(&cmp::min(t1, t2, flux::proj(cmp::reverse_compare, &Test::i)) == &t1);
+        STATIC_CHECK(&cmp::max(t1, t2, flux::proj(cmp::reverse_compare, &Test::i)) == &t2);
+    }
+
+    return true;
+}
+static_assert(test_comparisons());
+
+struct Test {
+    bool operator==(Test const&) const = default;
+    constexpr auto operator<=>(Test const&) const {
+        return std::partial_ordering::unordered;
+    }
+};
+
+constexpr bool test_partial_min_max()
+{
+    namespace cmp = flux::cmp;
+
+    // partial_min works just like min for sensible types
+    {
+        int i = 100, j = 10;
+        int& r = cmp::partial_min(i, j);
+
+        STATIC_CHECK(&r == &j);
+    }
+
+    // for partially ordered types, partial_min returns the first element
+    // if the arguments are unordered
+    {
+        Test const t1, t2;
+
+        Test const& r = cmp::partial_min(t1, t2);
+
+        STATIC_CHECK(&r == &t1);
+    }
+
+    // partial_max works just like min for sensible types
+    {
+        int i = 100, j = 10;
+        int& r = cmp::partial_max(i, j);
+
+        STATIC_CHECK(&r == &i);
+    }
+
+    // for partially ordered types, partial_max returns the second element
+    // if the arguments are unordered
+    {
+        Test const t1, t2;
+
+        Test const& r = cmp::partial_max(t1, t2);
+
+        STATIC_CHECK(&r == &t2);
+    }
+
+    return true;
+}
+static_assert(test_partial_min_max());
+
 }
 
 TEST_CASE("predicates")
 {
     REQUIRE(test_predicate_comparators());
     REQUIRE(test_predicate_combiners());
+}
+
+TEST_CASE("comparators")
+{
+    REQUIRE(test_comparisons());
+    REQUIRE(test_partial_min_max());
 }
 

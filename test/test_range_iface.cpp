@@ -3,13 +3,11 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux.hpp>
-
 #include <algorithm>
 #include <array>
 #include <numeric>
+#include <ranges>
+#include <utility>
 
 #include "test_utils.hpp"
 
@@ -103,7 +101,7 @@ constexpr bool test_range_iface()
 
     {
         int arr[] = {1, 2, 3, 4, 5};
-        auto seq = single_pass_only(flux::from(arr));
+        auto seq = single_pass_only(flux::mut_ref(arr));
 
         using V = decltype(seq);
 

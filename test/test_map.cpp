@@ -3,13 +3,11 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux.hpp>
+#include <algorithm>
+#include <array>
+#include <ranges>
 
 #include "test_utils.hpp"
-
-#include <array>
 
 namespace {
 
@@ -18,7 +16,7 @@ constexpr bool test_map()
     {
         int arr[] = {0, 1, 2, 3, 4};
 
-        auto mapped = flux::map(flux::ref(arr), [](int& i) { return i * 2; });
+        auto mapped = flux::map(flux::mut_ref(arr), [](int& i) { return i * 2; });
 
         using M = decltype(mapped);
 
@@ -65,7 +63,7 @@ constexpr bool test_map()
     {
         int arr[] = {0, 1, 2, 3, 4};
 
-        auto cur = flux::from(arr).map([](int i) { return i * 2; }).find(4);
+        auto cur = flux::ref(arr).map([](int i) { return i * 2; }).find(4);
 
         STATIC_CHECK(cur == 2);
     }
@@ -73,7 +71,7 @@ constexpr bool test_map()
     {
         std::pair<int, int> pairs[] = { {0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}};
 
-        auto mapped = flux::from(pairs).map(&std::pair<int, int>::first);
+        auto mapped = flux::mut_ref(pairs).map(&std::pair<int, int>::first);
 
         using M = decltype(mapped);
         static_assert(flux::random_access_sequence<M>);

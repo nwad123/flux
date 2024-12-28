@@ -3,13 +3,9 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux.hpp>
+#include <array>
 
 #include "test_utils.hpp"
-
-#include <array>
 
 namespace {
 
@@ -35,7 +31,7 @@ constexpr bool test_unchecked()
         auto ints = std::array{5, 4, 3, 2, 1};
         auto doubles = std::array{3.0, 2.0, 1.0};
 
-        auto seq = unchecked(zip(ref(ints), ref(doubles)));
+        auto seq = unchecked(zip(mut_ref(ints), mut_ref(doubles)));
 
         using S = decltype(seq);
 
@@ -46,7 +42,7 @@ constexpr bool test_unchecked()
         static_assert(std::same_as<element_t<S>, std::pair<int&, double&>>);
         static_assert(std::same_as<rvalue_element_t<S>, std::pair<int&&, double&&>>);
 
-        seq.sort(flux::proj(std::less<>{}, [](auto p) { return p.second; }));
+        seq.sort(flux::proj(std::weak_order, [](auto p) { return p.second; }));
 
         STATIC_CHECK(check_equal(doubles, {1.0, 2.0, 3.0}));
         STATIC_CHECK(check_equal(ints, {3, 4, 5, 2, 1}));

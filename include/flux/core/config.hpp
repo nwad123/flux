@@ -6,16 +6,25 @@
 #ifndef FLUX_CORE_CONFIG_HPP_INCLUDED
 #define FLUX_CORE_CONFIG_HPP_INCLUDED
 
+#include <flux/macros.hpp>
+
 #include <concepts>
 #include <cstddef>
 #include <type_traits>
 
 #define FLUX_ERROR_POLICY_TERMINATE 1
-#define FLUX_ERROR_POLICY_UNWIND     2
+#define FLUX_ERROR_POLICY_UNWIND    2
+#define FLUX_ERROR_POLICY_FAIL_FAST 3
 
 #define FLUX_OVERFLOW_POLICY_ERROR   10
 #define FLUX_OVERFLOW_POLICY_WRAP    11
 #define FLUX_OVERFLOW_POLICY_IGNORE  12
+
+#define FLUX_DIVIDE_BY_ZERO_POLICY_ERROR   100
+#define FLUX_DIVIDE_BY_ZERO_POLICY_IGNORE  101
+
+#define FLUX_INTEGER_CAST_POLICY_CHECKED 1001
+#define FLUX_INTEGER_CAST_POLICY_UNCHECKED 1002
 
 // Default error policy is terminate
 #define FLUX_DEFAULT_ERROR_POLICY FLUX_ERROR_POLICY_TERMINATE
@@ -27,14 +36,30 @@
 #  define FLUX_DEFAULT_OVERFLOW_POLICY FLUX_OVERFLOW_POLICY_ERROR
 #endif // NDEBUG
 
+// Default divide by zero policy is error in debug builds, ignore in release builds
+#ifdef NDEBUG
+#  define FLUX_DEFAULT_DIVIDE_BY_ZERO_POLICY FLUX_DIVIDE_BY_ZERO_POLICY_IGNORE
+#else
+#  define FLUX_DEFAULT_DIVIDE_BY_ZERO_POLICY FLUX_DIVIDE_BY_ZERO_POLICY_ERROR
+#endif // NDEBUG
+
 // Select which error policy to use
 #if defined(FLUX_TERMINATE_ON_ERROR)
 #  define FLUX_ERROR_POLICY FLUX_ERROR_POLICY_TERMINATE
 #elif defined(FLUX_UNWIND_ON_ERROR)
 #  define FLUX_ERROR_POLICY FLUX_ERROR_POLICY_UNWIND
+#elif defined(FLUX_FAIL_FAST_ON_ERROR)
+#  define FLUX_ERROR_POLICY FLUX_ERROR_POLICY_FAIL_FAST
 #else
 #  define FLUX_ERROR_POLICY FLUX_DEFAULT_ERROR_POLICY
 #endif // FLUX_TERMINATE_ON_ERROR
+
+// Default integer cast policy is checked in debug builds, unchecked in release builds
+#ifdef NDEBUG
+#  define FLUX_DEFAULT_INTEGER_CAST_POLICY FLUX_INTEGER_CAST_POLICY_UNCHECKED
+#else
+#  define FLUX_DEFAULT_INTEGER_CAST_POLICY FLUX_INTEGER_CAST_POLICY_CHECKED
+#endif // NDEBUG
 
 // Should we print an error message before terminating?
 #ifndef FLUX_PRINT_ERROR_ON_TERMINATE
@@ -61,6 +86,33 @@
 #  define FLUX_OVERFLOW_POLICY FLUX_DEFAULT_OVERFLOW_POLICY
 #endif // FLUX_ERROR_ON_OVERFLOW
 
+// Select which divide by zero policy to use
+#if defined(FLUX_ERROR_ON_DIVIDE_BY_ZERO)
+#  define FLUX_DIVIDE_BY_ZERO_POLICY FLUX_DIVIDE_BY_ZERO_POLICY_ERROR
+#elif defined(FLUX_IGNORE_DIVIDE_BY_ZERO)
+#  define FLUX_DIVIDE_BY_ZERO_POLICY FLUX_DIVIDE_BY_ZERO_POLICY_IGNORE
+#else
+#  define FLUX_DIVIDE_BY_ZERO_POLICY FLUX_DEFAULT_DIVIDE_BY_ZERO_POLICY
+#endif // FLUX_ERROR_ON_DIVIDE_BY_ZERO
+
+// Select which integer cast policy to use
+#if defined(FLUX_CHECKED_INTEGER_CASTS)
+#  define FLUX_INTEGER_CAST_POLICY FLUX_INTEGER_CAST_POLICY_CHECKED
+#elif defined(FLUX_UNCHECKED_INTEGER_CASTS)
+#  define FLUX_INTEGER_CAST_POLICY FLUX_INTEGER_CAST_POLICY_UNCHECKED
+#else
+#  define FLUX_INTEGER_CAST_POLICY FLUX_DEFAULT_INTEGER_CAST_POLICY
+#endif
+
+// Should we try to use static bounds checking?
+#if !defined(FLUX_DISABLE_STATIC_BOUNDS_CHECKING)
+#  if defined(__has_cpp_attribute) && defined(__has_builtin)
+#    if __has_builtin(__builtin_constant_p) && __has_cpp_attribute(gnu::error)
+#      define FLUX_HAVE_GCC_STATIC_BOUNDS_CHECKING 1
+#    endif
+#  endif
+#endif // FLUX_DISABLE_STATIC_BOUNDS_CHECKING
+
 // Default int_t is ptrdiff_t
 #define FLUX_DEFAULT_INT_TYPE std::ptrdiff_t
 
@@ -71,29 +123,55 @@
 
 namespace flux {
 
+FLUX_EXPORT
 enum class error_policy {
     terminate = FLUX_ERROR_POLICY_TERMINATE,
-    unwind = FLUX_ERROR_POLICY_UNWIND
+    unwind = FLUX_ERROR_POLICY_UNWIND,
+    fail_fast = FLUX_ERROR_POLICY_FAIL_FAST
 };
 
+FLUX_EXPORT
 enum class overflow_policy {
     ignore = FLUX_OVERFLOW_POLICY_IGNORE,
     wrap = FLUX_OVERFLOW_POLICY_WRAP,
     error = FLUX_OVERFLOW_POLICY_ERROR
 };
 
+FLUX_EXPORT
+enum class divide_by_zero_policy {
+    ignore = FLUX_DIVIDE_BY_ZERO_POLICY_IGNORE,
+    error = FLUX_DIVIDE_BY_ZERO_POLICY_ERROR
+};
+
+FLUX_EXPORT
+enum class integer_cast_policy {
+    checked = FLUX_INTEGER_CAST_POLICY_CHECKED,
+    unchecked = FLUX_INTEGER_CAST_POLICY_UNCHECKED
+};
+
 namespace config {
 
+FLUX_EXPORT
 using int_type = FLUX_INT_TYPE;
 static_assert(std::signed_integral<int_type> && (sizeof(int_type) >= sizeof(std::ptrdiff_t)),
               "Custom FLUX_INT_TYPE must be a signed integer type at least as large as ptrdiff_t");
 
+FLUX_EXPORT
 inline constexpr error_policy on_error = static_cast<error_policy>(FLUX_ERROR_POLICY);
 
+FLUX_EXPORT
 inline constexpr overflow_policy on_overflow = static_cast<overflow_policy>(FLUX_OVERFLOW_POLICY);
 
+FLUX_EXPORT
+inline constexpr divide_by_zero_policy on_divide_by_zero = static_cast<divide_by_zero_policy>(FLUX_DIVIDE_BY_ZERO_POLICY);
+
+FLUX_EXPORT
+inline constexpr integer_cast_policy on_integer_cast = static_cast<integer_cast_policy>(FLUX_INTEGER_CAST_POLICY);
+
+FLUX_EXPORT
 inline constexpr bool print_error_on_terminate = FLUX_PRINT_ERROR_ON_TERMINATE;
 
+FLUX_EXPORT
 inline constexpr bool enable_debug_asserts = FLUX_ENABLE_DEBUG_ASSERTS;
 
 } // namespace config

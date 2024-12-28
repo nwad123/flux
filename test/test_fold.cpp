@@ -3,13 +3,11 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux.hpp>
+#include <array>
+#include <chrono>
+#include <vector>
 
 #include "test_utils.hpp"
-
-#include <array>
 
 namespace {
 
@@ -37,7 +35,7 @@ constexpr bool test_fold()
     {
         std::array arr{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-        auto prod = flux::from(arr)
+        auto prod = flux::ref(arr)
                        .filter([](int i) { return i % 2 == 0; })
                        .map([](int i) { return i + i; })
                        .fold(std::multiplies<>{}, int64_t{1});

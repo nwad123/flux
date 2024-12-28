@@ -3,14 +3,10 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
+#include <array>
+#include <utility>
 
 #include "test_utils.hpp"
-
-#include <flux.hpp>
-
-#include <array>
-#include <iostream>
 
 namespace {
 
@@ -51,17 +47,20 @@ constexpr bool test_filter()
         static_assert(not flux::ordered_cursor<F>);
         static_assert(not flux::sized_sequence<F>);
 
-        static_assert(not flux::sequence<F const>);
+        static_assert(flux::sequence<F const>);
+        static_assert(flux::bidirectional_sequence<F const>);
+        static_assert(flux::bounded_sequence<F const>);
+        static_assert(not flux::ordered_cursor<F const>);
+        static_assert(not flux::sized_sequence<F const>);
 
-        if (!check_equal(filtered, {0, 2, 4, 6, 8})) {
-            return false;
-        }
+        STATIC_CHECK(check_equal(filtered, {0, 2, 4, 6, 8}));
+        STATIC_CHECK(check_equal(std::as_const(filtered), {0, 2, 4, 6, 8}));
     }
 
     // Filtering single-pass sequences works okay
     {
         int arr[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-        auto filtered = single_pass_only(flux::from(arr)).filter(is_even);
+        auto filtered = single_pass_only(flux::ref(arr)).filter(is_even);
         using F = decltype(filtered);
         static_assert(flux::sequence<F>);
         static_assert(not flux::multipass_sequence<F>);

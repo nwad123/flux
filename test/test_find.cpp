@@ -3,15 +3,20 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "catch.hpp"
-
-#include <flux/core/default_impls.hpp>
-#include <flux/op/find.hpp>
-#include <flux/op/from.hpp>
+#include <doctest/doctest.h>
 
 #include <array>
-#include <forward_list>
+#include <concepts>
+#include <string>
+#include <string_view>
 #include <vector>
+
+#ifdef USE_MODULES
+import flux;
+#else
+#include <flux/core/default_impls.hpp>
+#include <flux/algorithm/find.hpp>
+#endif
 
 namespace {
 
@@ -45,7 +50,7 @@ constexpr bool test_find()
             return false;
         }
 
-        auto lens = flux::from(ints);
+        auto lens = flux::ref(ints);
 
         cur = lens.find(3);
         if (cur != 3) {
@@ -74,8 +79,19 @@ TEST_CASE("find")
 
     {
         std::vector<int> vec{1, 2, 3, 4, 5};
-        auto idx = flux::from(vec).find(99);
+        auto idx = flux::ref(vec).find(99);
         REQUIRE(idx == std::ssize(vec));
     }
 
+    {
+        std::string_view str = "abcdefg";
+        auto idx = flux::find(str, 'd');
+        REQUIRE(idx == 3);
+    }
+
+    {
+        std::string str = "";
+        auto idx = flux::find(str, 'a');
+        REQUIRE(idx == flux::last(str));
+    }
 }

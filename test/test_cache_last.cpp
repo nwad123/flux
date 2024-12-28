@@ -1,8 +1,4 @@
 
-#include "catch.hpp"
-
-#include <flux.hpp>
-
 #include <array>
 
 #include "test_utils.hpp"
@@ -23,11 +19,10 @@ constexpr bool test_cache_last()
         using C = decltype(cached);
 
         static_assert(flux::sequence<C>);
-        static_assert(flux::contiguous_sequence<C>);
+        static_assert(flux::random_access_sequence<C>);
         static_assert(flux::bounded_sequence<C>);
-        static_assert(flux::sized_sequence<C>); // because RA and bounded
 
-        STATIC_CHECK(cached.size() == 5);
+        STATIC_CHECK(cached.count() == 5);
 
         static_assert(std::ranges::common_range<C>);
     }
@@ -36,8 +31,8 @@ constexpr bool test_cache_last()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto seq = flux::from(arr);
-        auto cached = flux::cache_last(flux::ref(seq));
+        auto seq = flux::ref(arr);
+        auto cached = flux::cache_last(flux::ref(arr));
 
         STATIC_CHECK(&seq.base() == &cached.base());
         STATIC_CHECK(&cached.base() == &arr);
@@ -47,7 +42,7 @@ constexpr bool test_cache_last()
     {
         std::array arr{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
-        flux::from(arr)
+        flux::mut_ref(arr)
             .take_while([](int i) { return i <= 5; })
             .cache_last()
             .inplace_reverse();

@@ -7,11 +7,11 @@
 #define FLUX_CORE_INLINE_SEQUENCE_BASE_HPP_INCLUDED
 
 #include <flux/core/sequence_access.hpp>
-
-#include <flux/op/requirements.hpp>
+#include <flux/core/operation_requirements.hpp>
 
 namespace flux {
 
+FLUX_EXPORT
 template <cursor Cur>
 struct bounds {
     FLUX_NO_UNIQUE_ADDRESS Cur from;
@@ -23,6 +23,7 @@ struct bounds {
 template <cursor Cur>
 bounds(Cur, Cur) -> bounds<Cur>;
 
+FLUX_EXPORT
 template <sequence Seq>
 using bounds_t = bounds<cursor_t<Seq>>;
 
@@ -120,6 +121,14 @@ public:
     [[nodiscard]]
     constexpr auto usize() const requires sized_sequence<Derived const> { return flux::usize(derived()); }
 
+    template <typename Pred>
+        requires std::invocable<Pred&, element_t<Derived>> &&
+        detail::boolean_testable<std::invoke_result_t<Pred&, element_t<Derived>>>
+    constexpr auto for_each_while(Pred pred)
+    {
+        return flux::for_each_while(derived(), std::ref(pred));
+    }
+
     /// Returns true if the sequence contains no elements
     [[nodiscard]]
     constexpr auto is_empty()
@@ -191,6 +200,12 @@ public:
         return std::invoke(FLUX_FWD(func), std::move(derived()), FLUX_FWD(args)...);
     }
 
+    constexpr auto ref() const& requires const_iterable_sequence<Derived>;
+
+    auto ref() const&& -> void = delete;
+
+    constexpr auto mut_ref() &;
+
     /*
      * Iterator support
      */
@@ -210,6 +225,12 @@ public:
     [[nodiscard]]
     constexpr auto adjacent() && requires multipass_sequence<Derived>;
 
+    template <typename Pred>
+        requires multipass_sequence<Derived> &&
+                 std::predicate<Pred&, element_t<Derived>, element_t<Derived>>
+    [[nodiscard]]
+    constexpr auto adjacent_filter(Pred pred) &&;
+
     template <distance_t N, typename Func>
         requires multipass_sequence<Derived>
     [[nodiscard]]
@@ -221,7 +242,7 @@ public:
                      (multipass_sequence<Derived> && not infinite_sequence<Derived>);
 
     [[nodiscard]]
-    constexpr auto chunk(std::integral auto chunk_sz) &&;
+    constexpr auto chunk(num::integral auto chunk_sz) &&;
 
     template <typename Pred>
         requires multipass_sequence<Derived> &&
@@ -230,7 +251,22 @@ public:
     constexpr auto chunk_by(Pred pred) &&;
 
     [[nodiscard]]
-    constexpr auto drop(std::integral auto count) &&;
+    constexpr auto cursors() && requires multipass_sequence<Derived>;
+
+    [[nodiscard]]
+    constexpr auto cycle() &&
+            requires infinite_sequence<Derived> || multipass_sequence<Derived>;
+
+    [[nodiscard]]
+    constexpr auto cycle(num::integral auto count) && requires multipass_sequence<Derived>;
+
+    [[nodiscard]]
+    constexpr auto dedup() &&
+        requires multipass_sequence<Derived> &&
+                 std::equality_comparable<element_t<Derived>>;
+
+    [[nodiscard]]
+    constexpr auto drop(num::integral auto count) &&;
 
     template <typename Pred>
         requires std::predicate<Pred&, element_t<Derived>>
@@ -242,13 +278,41 @@ public:
     [[nodiscard]]
     constexpr auto filter(Pred pred) &&;
 
+    template <typename Func>
+        requires std::invocable<Func&, element_t<Derived>> &&
+                 detail::optional_like<std::invoke_result_t<Func&, element_t<Derived>>>
+    [[nodiscard]]
+    constexpr auto filter_map(Func func) &&;
+
+    [[nodiscard]]
+    constexpr auto filter_deref() && requires detail::optional_like<value_t<Derived>>;
+
     [[nodiscard]]
     constexpr auto flatten() && requires sequence<element_t<Derived>>;
+
+    template <adaptable_sequence Pattern>
+        requires sequence<element_t<Derived>> &&
+                 multipass_sequence<Pattern> &&
+                 detail::flatten_with_compatible<element_t<Derived>, Pattern>
+    [[nodiscard]]
+    constexpr auto flatten_with(Pattern&& pattern) &&;
+
+
+    template <typename Value>
+        requires sequence<element_t<Derived>> &&
+                 std::constructible_from<value_t<element_t<Derived>>, Value&&>
+    [[nodiscard]]
+    constexpr auto flatten_with(Value value) &&;
 
     template <typename Func>
         requires std::invocable<Func&, element_t<Derived>>
     [[nodiscard]]
     constexpr auto map(Func func) &&;
+
+    template <adaptable_sequence Mask>
+        requires detail::boolean_testable<element_t<Mask>>
+    [[nodiscard]]
+    constexpr auto mask(Mask&& mask_) &&;
 
     [[nodiscard]]
     constexpr auto pairwise() && requires multipass_sequence<Derived>;
@@ -262,6 +326,9 @@ public:
         requires foldable<Derived, Func, Init>
     [[nodiscard]]
     constexpr auto prescan(Func func, Init init) &&;
+
+    [[nodiscard]]
+    constexpr auto read_only() &&;
 
     [[nodiscard]]
     constexpr auto reverse() &&
@@ -278,27 +345,36 @@ public:
     constexpr auto scan_first(Func func) &&;
 
     [[nodiscard]]
-    constexpr auto slide(std::integral auto win_sz) && requires multipass_sequence<Derived>;
+    constexpr auto slide(num::integral auto win_sz) && requires multipass_sequence<Derived>;
 
-    template <multipass_sequence Pattern>
-        requires std::equality_comparable_with<element_t<Derived>, element_t<Pattern>>
+    template <typename Pattern>
+        requires multipass_sequence<Derived> &&
+                 multipass_sequence<Pattern> &&
+                 std::equality_comparable_with<element_t<Derived>, element_t<Pattern>>
     [[nodiscard]]
     constexpr auto split(Pattern&& pattern) &&;
 
-    template <typename ValueType>
-        requires decays_to<ValueType, value_t<Derived>>
+    template <typename Delim>
+        requires multipass_sequence<Derived> &&
+                 std::equality_comparable_with<element_t<Derived>, Delim const&>
     [[nodiscard]]
-    constexpr auto split(ValueType&& delim) &&;
+    constexpr auto split(Delim&& delim) &&;
+
+    template <typename Pred>
+        requires multipass_sequence<Derived> &&
+                 std::predicate<Pred const&, element_t<Derived>>
+    [[nodiscard]]
+    constexpr auto split(Pred pred) &&;
 
     template <typename Pattern>
     [[nodiscard]]
     constexpr auto split_string(Pattern&& pattern) &&;
 
     [[nodiscard]]
-    constexpr auto stride(std::integral auto by) &&;
+    constexpr auto stride(num::integral auto by) &&;
 
     [[nodiscard]]
-    constexpr auto take(std::integral auto count) &&;
+    constexpr auto take(num::integral auto count) &&;
 
     template <typename Pred>
         requires std::predicate<Pred&, element_t<Derived>>
@@ -362,6 +438,21 @@ public:
     [[nodiscard]]
     constexpr auto find_if_not(Pred pred);
 
+    template <typename Cmp = std::compare_three_way>
+        requires weak_ordering_for<Cmp, Derived>
+    [[nodiscard]]
+    constexpr auto find_max(Cmp cmp = Cmp{});
+
+    template <typename Cmp = std::compare_three_way>
+        requires weak_ordering_for<Cmp, Derived>
+    [[nodiscard]]
+    constexpr auto find_min(Cmp cmp = Cmp{});
+
+    template <typename Cmp = std::compare_three_way>
+        requires weak_ordering_for<Cmp, Derived>
+    [[nodiscard]]
+    constexpr auto find_minmax(Cmp cmp = Cmp{});
+
     template <typename D = Derived, typename Func, typename Init>
         requires foldable<Derived, Func, Init>
     [[nodiscard]]
@@ -377,25 +468,20 @@ public:
         requires std::invocable<Func&, element_t<Derived>>
     constexpr auto for_each(Func func) -> Func;
 
-    template <typename Pred>
-        requires std::invocable<Pred&, element_t<Derived>> &&
-                 detail::boolean_testable<std::invoke_result_t<Pred&, element_t<Derived>>>
-    constexpr auto for_each_while(Pred pred);
-
     constexpr auto inplace_reverse()
         requires bounded_sequence<Derived> &&
                  detail::element_swappable_with<Derived, Derived>;
 
-    template <typename Cmp = std::ranges::less>
-        requires strict_weak_order_for<Cmp, Derived>
+    template <typename Cmp = std::compare_three_way>
+        requires weak_ordering_for<Cmp, Derived>
     constexpr auto max(Cmp cmp = Cmp{});
 
-    template <typename Cmp = std::ranges::less>
-        requires strict_weak_order_for<Cmp, Derived>
+    template <typename Cmp = std::compare_three_way>
+        requires weak_ordering_for<Cmp, Derived>
     constexpr auto min(Cmp cmp = Cmp{});
 
-    template <typename Cmp = std::ranges::less>
-        requires strict_weak_order_for<Cmp, Derived>
+    template <typename Cmp = std::compare_three_way>
+        requires weak_ordering_for<Cmp, Derived>
     constexpr auto minmax(Cmp cmp = Cmp{});
 
     template <typename Pred>
@@ -412,11 +498,11 @@ public:
         requires foldable<Derived, std::plus<>, value_t<Derived>> &&
                  std::default_initializable<value_t<Derived>>;
 
-    template <typename Cmp = std::ranges::less>
+    template <typename Cmp = std::compare_three_way>
         requires random_access_sequence<Derived> &&
                  bounded_sequence<Derived> &&
                  detail::element_swappable_with<Derived, Derived> &&
-                 strict_weak_order_for<Cmp, Derived>
+                 weak_ordering_for<Cmp, Derived>
     constexpr void sort(Cmp cmp = {});
 
     constexpr auto product()

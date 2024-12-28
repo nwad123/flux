@@ -14,54 +14,99 @@
 #include <stdexcept>
 #include <type_traits>
 
+#if defined(__has_builtin)
+#  if __has_builtin(__builtin_trap)
+#    define FLUX_HAS_BUILTIN_TRAP 1
+#  endif
+#elif defined(_MSC_VER)
+#  include <intrin.h>
+#  define FLUX_HAS_FASTFAIL 1
+#endif
+
 namespace flux {
 
+FLUX_EXPORT
 struct unrecoverable_error : std::logic_error {
-    explicit unrecoverable_error(char const* msg) : std::logic_error(msg) {}
+    explicit inline unrecoverable_error(char const* msg) : std::logic_error(msg) {}
 };
 
 namespace detail {
 
 struct runtime_error_fn {
+private:
     [[noreturn]]
-    inline void operator()(char const* msg,
-                           std::source_location loc = std::source_location::current()) const
+    FLUX_ALWAYS_INLINE
+    static void fail_fast()
     {
-        if constexpr (config::on_error == error_policy::unwind) {
-            char buf[1024];
-            std::snprintf(buf, 1024, "%s:%u: Fatal error: %s",
-                          loc.file_name(), loc.line(), msg);
-            throw unrecoverable_error(buf);
+#if FLUX_HAS_BUILTIN_TRAP
+        __builtin_trap();
+#elif FLUX_HAS_FASTFAIL
+        __fastfail(7); // FAST_FAIL_FATAL_APP_EXIT
+#else
+        std::abort();
+#endif
+    }
+
+    [[noreturn]]
+    static void unwind(const char* msg, std::source_location loc)
+    {
+        char buf[1024];
+        std::snprintf(buf, 1024, "%s:%u: Fatal error: %s",
+                      loc.file_name(), loc.line(), msg);
+        throw unrecoverable_error(buf);
+    }
+
+    [[noreturn]]
+    static void terminate(const char* msg, std::source_location loc)
+    {
+        if constexpr (config::print_error_on_terminate) {
+            std::fprintf(stderr, "%s:%u: Fatal error: %s\n",
+                         loc.file_name(), loc.line(), msg);
+        }
+        std::terminate();
+    }
+
+public:
+    [[noreturn]]
+    FLUX_ALWAYS_INLINE
+    void operator()(char const* msg,
+                    std::source_location loc = std::source_location::current()) const
+    {
+        if constexpr (config::on_error == error_policy::fail_fast) {
+            fail_fast();
+        } else if constexpr (config::on_error == error_policy::unwind) {
+            unwind(msg, loc);
         } else {
-            if constexpr (config::print_error_on_terminate) {
-                std::fprintf(stderr, "%s:%u: Fatal error: %s\n",
-                             loc.file_name(), loc.line(), msg);
-            }
-            std::terminate();
+            terminate(msg, loc);
         }
     }
 };
 
 }
 
-inline constexpr auto runtime_error = detail::runtime_error_fn{};
+FLUX_EXPORT inline constexpr auto runtime_error = detail::runtime_error_fn{};
+
+#ifdef FLUX_HAVE_GCC_STATIC_BOUNDS_CHECKING
+[[gnu::error("out-of-bounds sequence access detected")]]
+void static_bounds_check_failed(); // not defined
+#endif
 
 namespace detail {
 
 struct assert_fn {
-    constexpr void operator()(bool cond, char const* msg,
+    inline constexpr void operator()(bool cond, char const* msg,
                               std::source_location loc = std::source_location::current()) const
     {
-        if (cond) [[likely]] {
+        if (cond) {
             return;
-        } else [[unlikely]] {
+        } else {
             runtime_error(msg, std::move(loc));
         }
     }
 };
 
 struct bounds_check_fn {
-    constexpr void operator()(bool cond, std::source_location loc = std::source_location::current()) const
+    inline constexpr void operator()(bool cond, std::source_location loc = std::source_location::current()) const
     {
         if (!std::is_constant_evaluated()) {
             assert_fn{}(cond, "out of bounds sequence access", std::move(loc));
@@ -69,14 +114,29 @@ struct bounds_check_fn {
     }
 };
 
+struct indexed_bounds_check_fn {
+    template <typename T>
+    inline constexpr void operator()(T idx, T limit,
+                                     std::source_location loc = std::source_location::current()) const
+    {
+        if (!std::is_constant_evaluated()) {
+#ifdef FLUX_HAVE_GCC_STATIC_BOUNDS_CHECKING
+            if (__builtin_constant_p(idx) && __builtin_constant_p(limit)) {
+                if (idx < T{0} || idx >= limit) {
+                    static_bounds_check_failed();
+                }
+            }
+#endif
+            assert_fn{}(idx >= T{0} && idx < limit, "out-of-bounds sequence access", loc);
+        }
+    }
+};
+
 } // namespace detail
 
-inline constexpr auto assert_ = detail::assert_fn{};
-inline constexpr auto bounds_check = detail::bounds_check_fn{};
-
-#define FLUX_ASSERT(cond) (::flux::assert_(cond, "assertion '" #cond "' failed"))
-
-#define FLUX_DEBUG_ASSERT(cond) (::flux::assert_(!::flux::config::enable_debug_asserts || (cond), "assertion '" #cond "' failed"));
+FLUX_EXPORT inline constexpr auto assert_ = detail::assert_fn{};
+FLUX_EXPORT inline constexpr auto bounds_check = detail::bounds_check_fn{};
+FLUX_EXPORT inline constexpr auto indexed_bounds_check = detail::indexed_bounds_check_fn{};
 
 } // namespace flux
 
