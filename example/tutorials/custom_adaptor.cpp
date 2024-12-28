@@ -130,8 +130,9 @@ public:
      * at global namespace scope, but a nested class is usually much more
      * convenient.
      *
-     * The traits class inherits from the flux default traits so that we don't 
-     * have to implement as many functions.
+     * The traits class inherits from the flux default traits class which
+     * provides default implementation of part of the sequence interface so 
+     * that we don't need to implment them all manually.
      */
 
     struct flux_sequence_traits : flux::default_sequence_traits {
