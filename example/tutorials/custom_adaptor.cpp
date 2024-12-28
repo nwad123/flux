@@ -3,6 +3,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
+#include "flux/core/concepts.hpp"
 #include <flux.hpp>
 
 #include <iostream>
@@ -128,9 +129,12 @@ public:
      *     flux::sequence_traits<repeat_elements_adaptor<Base>>
      * at global namespace scope, but a nested class is usually much more
      * convenient.
+     *
+     * The traits class inherits from the flux default traits so that we don't 
+     * have to implement as many functions.
      */
 
-    struct flux_sequence_traits {
+    struct flux_sequence_traits : flux::default_sequence_traits {
     private:
         // For this particular adaptor we need to wrap the "upstream" cursor
         // to add extra data. We can call this class anything we like, but
